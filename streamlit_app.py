@@ -1,14 +1,19 @@
 import streamlit as st
-from pathlib import Path
 from pypdf import PdfReader
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
+import io
 
 
 st.set_page_config(
     page_title="AI Career Assistant",
     page_icon="🤖"
 )
+
+# -------------------------
+# Sidebar
+# -------------------------
+
 st.sidebar.title("🤖 AI Career Assistant")
 
 st.sidebar.markdown("""
@@ -20,8 +25,8 @@ This application uses RAG to answer questions from a CV.
 - Python
 - Streamlit
 - Sentence Transformers
-- NumPy
 - PyPDF
+- Scikit-learn
 - RAG
 
 ### Features
@@ -30,9 +35,15 @@ This application uses RAG to answer questions from a CV.
 - 📊 Relevance scoring
 - 💬 CV question answering
 """)
+
+# -------------------------
+# Main page
+# -------------------------
+
 st.title("🤖 AI Career Assistant")
+
 st.markdown(
-    "Ask questions about your CV and find relevant information instantly."
+    "Upload your CV and ask questions about your experience, skills, education and projects."
 )
 
 st.info(
@@ -41,6 +52,7 @@ st.info(
     "What is my educational background? "
     "What work experience do I have?"
 )
+
 st.markdown("### 💡 Example Questions")
 
 st.markdown("""
@@ -52,19 +64,25 @@ st.markdown("""
 """)
 
 # -------------------------
-# Load CV
+# Upload CV
 # -------------------------
 
-pdf_folder = Path("documents")
-pdf_files = list(pdf_folder.glob("*.pdf"))
+uploaded_file = st.file_uploader(
+    "📄 Upload your CV (PDF)",
+    type=["pdf"]
+)
 
-if not pdf_files:
-    st.error("No PDF found in the documents folder.")
+if uploaded_file is None:
+    st.warning("Please upload a PDF CV to start.")
     st.stop()
 
-pdf_path = pdf_files[0]
+# -------------------------
+# Read PDF
+# -------------------------
 
-reader = PdfReader(pdf_path)
+pdf_bytes = uploaded_file.getvalue()
+
+reader = PdfReader(io.BytesIO(pdf_bytes))
 
 text = ""
 
@@ -74,9 +92,8 @@ for page in reader.pages:
     if page_text:
         text += page_text + "\n"
 
-
 # -------------------------
-# Create CV chunks
+# Create chunks
 # -------------------------
 
 chunk_size = 500
@@ -85,7 +102,6 @@ chunks = [
     text[i:i + chunk_size]
     for i in range(0, len(text), chunk_size)
 ]
-
 
 # -------------------------
 # Load embedding model
@@ -98,18 +114,11 @@ def load_model():
 
 model = load_model()
 
-
 # -------------------------
 # Create embeddings
 # -------------------------
 
-@st.cache_data
-def create_embeddings(_chunks):
-    return model.encode(_chunks)
-
-
-embeddings = create_embeddings(chunks)
-
+embeddings = model.encode(chunks)
 
 # -------------------------
 # Ask question
@@ -118,7 +127,6 @@ embeddings = create_embeddings(chunks)
 query = st.text_input(
     "Ask something about your CV:"
 )
-
 
 if query:
 
@@ -135,15 +143,15 @@ if query:
 
     st.subheader("📄 Relevant Information From Your CV")
 
-if score < 0.15:
-    st.warning(
-        "I couldn't find enough relevant information in the CV. "
-        "Try asking about skills, education, experience, or projects."
-    )
-else:
-    st.success("Relevant information found in your CV.")
-    st.write(chunks[best_index])
+    if score < 0.15:
+        st.warning(
+            "I couldn't find enough relevant information in the CV. "
+            "Try asking about skills, education, experience, or projects."
+        )
+    else:
+        st.success("Relevant information found in your CV.")
+        st.write(chunks[best_index])
 
-st.caption(
-    f"Relevance score: {score:.3f}"
-)
+    st.caption(
+        f"Relevance score: {score:.3f}"
+    )
